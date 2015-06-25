@@ -6,6 +6,9 @@ Tool for developing custom [Caddy](http://caddyserver.com) middleware
 $ go get github.com/caddyserver/caddydev
 ```
 
+### Middleware Development
+You can get started with the developing custom middleware for Caddy using this example. [https://github.com/abiosoft/hello-caddy](https://github.com/abiosoft/hello-caddy)
+
 ### Usage
 caddydev creates and starts a custom Caddy on the fly with the currently developed middleware integrated.
 ```shell
@@ -41,3 +44,9 @@ import | go import path
 repository | middleware repository
 directive | keyword to register middleware in Caddyfile
 after (optional) | priority of middleware. What directive should it be placed after.
+
+### Note
+caddydev is still in active development and can still change significantly.
+
+### Disclaimer
+This software is provided as-is and you assume all risk.

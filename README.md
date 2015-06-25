@@ -30,7 +30,7 @@ Hello, I'm a caddy middleware
 
 ### Usage
 caddydev creates and starts a custom Caddy on the fly with the currently developed middleware integrated.
-```shell
+```
 $ caddydev help
 Usage:
 	caddydev [-c|-h|help] [caddy flags]

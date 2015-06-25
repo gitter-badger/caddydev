@@ -43,13 +43,8 @@ var (
 // middlewares. A call to Build on the returned builder will generate the binary.
 // If error is not nil, the returned Builder should be ignored.
 func PrepareBuild(middlewares features.Middlewares) (custombuild.Builder, error) {
-	imports := make([]string, len(middlewares))
-	for i, m := range middlewares {
-		imports[i] = m.Package
-	}
-
 	// create builder
-	builder, err := custombuild.NewUnready("github.com/mholt/caddy", gen(middlewares), imports)
+	builder, err := custombuild.NewUnready("github.com/mholt/caddy", gen(middlewares), middlewares.Packages())
 	if err != nil {
 		return builder, err
 	}

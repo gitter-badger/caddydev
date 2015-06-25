@@ -27,6 +27,11 @@ const (
 `
 )
 
+type Args struct {
+	configFile string
+	caddyArgs  []string
+}
+
 func main() {
 	// parse cli arguments.
 	args, err := parseArgs()
@@ -78,30 +83,6 @@ func main() {
 	// wait for exit signal
 	<-done
 
-}
-
-// trapInterrupts traps OS interrupt signals.
-func trapInterrupts(cleanup func()) chan struct{} {
-	done := make(chan struct{})
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		<-c
-		fmt.Print("OS Interrupt signal received. Performing cleanup...")
-		// TODO find how to buy more CPU time and run synchronously
-		go cleanup()
-		fmt.Println(" done.")
-		done <- struct{}{}
-	}()
-	return done
-}
-
-func exitIfErr(err error) {
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 }
 
 // parseArgs parses cli arguments. This caters for parsing extra flags to caddy.
@@ -162,7 +143,27 @@ func startCaddy(file string, args []string) error {
 	return nil
 }
 
-type Args struct {
-	configFile string
-	caddyArgs  []string
+// trapInterrupts traps OS interrupt signals.
+func trapInterrupts(cleanup func()) chan struct{} {
+	done := make(chan struct{})
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Print("OS Interrupt signal received. Performing cleanup...")
+		// TODO find how to buy more CPU time and run synchronously
+		go cleanup()
+		fmt.Println(" done.")
+		done <- struct{}{}
+	}()
+	return done
 }
+
+func exitIfErr(err error) {
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+

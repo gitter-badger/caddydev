@@ -40,13 +40,13 @@ Config | Details
 -------|--------
 name | Name of the middleware
 description | What does your middleware do
-import | go import path
-repository | middleware repository
+import | go get compatible import path
+repository | source code repository
 directive | keyword to register middleware in Caddyfile
-after (optional) | priority of middleware. What directive should it be placed after.
+after (optional) | priority of middleware (for development purpose only). What directive should it be placed after.
 
 ### Note
-caddydev is still in active development and can still change significantly.
+caddydev is in active development and can still change significantly.
 
 ### Disclaimer
 This software is provided as-is and you assume all risk.

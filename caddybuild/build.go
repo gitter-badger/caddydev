@@ -49,7 +49,7 @@ func PrepareBuild(middlewares features.Middlewares) (custombuild.Builder, error)
 	}
 
 	// create builder
-	builder, err := custombuild.NewUnreadyBuilder("github.com/mholt/caddy", gen(middlewares), imports)
+	builder, err := custombuild.NewUnready("github.com/mholt/caddy", gen(middlewares), imports)
 	if err != nil {
 		return builder, err
 	}

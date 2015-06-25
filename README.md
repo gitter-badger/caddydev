@@ -1,13 +1,32 @@
 # caddydev
-Tool for developing custom [Caddy](http://caddyserver.com) middleware
+Tool for developing custom [Caddy](http://caddyserver.com) middleware.
 
 ### Installation
-```
+```shell
 $ go get github.com/caddyserver/caddydev
 ```
 
 ### Middleware Development
-You can get started with the developing custom middleware for Caddy using this example. [https://github.com/abiosoft/hello-caddy](https://github.com/abiosoft/hello-caddy)
+##### 1. Pull hello middleware.
+```shell
+$ go get github.com/abiosoft/hello-caddy
+```
+##### 2. Navigate to the source directory.
+```shell
+$ cd $GOPATH/src/github.com/abiosoft/hello-caddy
+```
+##### 3. Start caddydev.
+```shell
+$ caddydev
+Starting caddy...
+0.0.0.0:2015
+```
+##### 4. Test it.
+```
+$ curl localhost:2015
+Hello, I'm a caddy middleware
+```
+[github.com/abiosoft/hello-caddy](https://github.com/abiosoft/hello-caddy) can be the template for your new middleware. Follow the link to learn more.
 
 ### Usage
 caddydev creates and starts a custom Caddy on the fly with the currently developed middleware integrated.
@@ -33,7 +52,7 @@ Sample config
   "import": "github.com/abiosoft/hello-caddy",
   "repository": "https://github.com/abiosoft/hello-caddy",
   "directive": "hello",
-  "after": "git"
+  "after": "gzip"
 }
 ```
 Config | Details
@@ -47,6 +66,9 @@ after (optional) | priority of middleware (for development purpose only). What d
 
 ### Note
 caddydev is in active development and can still change significantly.
+
+### License
+This program is copyrighted, proprietary property and, as such, no license is granted for commercial use or redistribution.
 
 ### Disclaimer
 This software is provided as-is and you assume all risk.

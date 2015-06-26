@@ -37,7 +37,17 @@ var (
 	config          Config
 	errParse        = errors.New("Error creating custom build, check setup setting.")
 	errPackageNames = errors.New("Error retrieving package names.")
+
+	// directivePos maps directive name to its position on the Registry.
+	directivesPos = map[string]int{}
 )
+
+func init() {
+	// prevent repetitive loop through Registry list
+	for i, m := range features.Registry {
+		directivesPos[m.Directive] = i
+	}
+}
 
 // PrepareBuild prepares a custombuild.Builder for generating a custom binary using
 // middlewares. A call to Build on the returned builder will generate the binary.
@@ -54,6 +64,8 @@ func PrepareBuild(middlewares features.Middlewares) (custombuild.Builder, error)
 
 	err = builder.Setup()
 	if err != nil {
+		// not useful, clear assets
+		go builder.Teardown()
 		return builder, err
 	}
 
@@ -61,6 +73,8 @@ func PrepareBuild(middlewares features.Middlewares) (custombuild.Builder, error)
 	// this code.
 	err = builder.SetImportPath("github.com/mholt/caddy")
 	if err != nil {
+		// not useful, clear assets
+		go builder.Teardown()
 		return builder, err
 	}
 
@@ -111,12 +125,13 @@ func gen(middlewares features.Middlewares) custombuild.CodeGenFunc {
 			end := int(node.End()) - 2
 
 			// if after is set, locate directive and add after it.
-			if config.After != "" {
+			after := getPrevDirective(m.Directive)
+			if after != "" {
 				found := false
 				c := node.(*ast.ValueSpec).Values[0].(*ast.CompositeLit)
 				for _, m := range c.Elts {
 					directive := m.(*ast.CompositeLit).Elts[0].(*ast.BasicLit)
-					if strconv.Quote(config.After) == directive.Value {
+					if strconv.Quote(after) == directive.Value {
 						end = int(m.End()) + 1
 						found = true
 						break
@@ -134,11 +149,25 @@ func gen(middlewares features.Middlewares) custombuild.CodeGenFunc {
 	}
 }
 
+// getPrevDirective gets the previous directive to d. It returns
+// the directive if found or an empty string otherwise.
+func getPrevDirective(d string) string {
+	// check if dev mode
+	if config.After != "" {
+		return config.After
+	}
+	// use registry order
+	pos, ok := directivesPos[d]
+	if !ok || pos <= 0 {
+		return ""
+	}
+	return features.Registry[pos-1].Directive
+}
+
 // getPackageNames gets the package names of packages. Useful for packages that
 // has a name different to their folder name. It returns a map of each package
 // to its name.
 func getPackageNames(packages []string) (map[string]string, error) {
-	//go list -f '{{.Name}}'
 	args := append([]string{"list", "-f", "{{.Name}}"}, packages...)
 	output, err := exec.Command("go", args...).Output()
 	if err != nil {
@@ -158,4 +187,3 @@ func getPackageNames(packages []string) (map[string]string, error) {
 func SetConfig(c Config) {
 	config = c
 }
-

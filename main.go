@@ -143,7 +143,7 @@ func parseArgs() (Args, error) {
 // readConfig reads configs from the cli arguments.
 func readConfig(args Args) (caddybuild.Config, error) {
 	var config = caddybuild.Config{
-		Middleware: features.Middleware{args.directive, ""},
+		Middleware: features.Middleware{Directive: args.directive},
 		After:args.after,
 	}
 	if args.source != "" {

@@ -33,6 +33,7 @@ Usage: caddydev [options] directive [caddy flags]
 options:
   -s, -source="."   Source code directory or go get path.
   -a, -after=""     Priority. After which directive should our new directive be placed.
+  -u, -update=false Pull latest caddy source code before building.
   -h, -help=false   Show this usage.
 
 directive:

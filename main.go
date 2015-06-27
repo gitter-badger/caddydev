@@ -22,6 +22,7 @@ const (
 options:
   -s, -source="."   Source code directory or go get path.
   -a, -after=""     Priority. After which directive should our new directive be placed.
+  -u, -update=false Pull latest caddy source code before building.
   -h, -help=false   Show this usage.
 
 directive:
@@ -36,11 +37,8 @@ type Args struct {
 	directive string
 	after     string
 	source    string
+	update    bool
 	caddyArgs []string
-}
-
-func usageError(err error) error {
-	return fmt.Errorf("Error: %v\n\n%v", err, usage)
 }
 
 func main() {
@@ -51,6 +49,25 @@ func main() {
 	// read config file.
 	config, err := readConfig(args)
 	exitIfErr(err)
+
+	fetched := false
+	// if caddy source does not exits, pull source.
+	if !isLocalPkg(caddybuild.CaddyPackage) {
+		fmt.Print("Caddy source not found. Fetching...")
+		err := fetchCaddy()
+		exitIfErr(err)
+		fmt.Println(" done.")
+		fetched = true
+	}
+
+	// if update flag is set, pull source.
+	if args.update && !fetched {
+		fmt.Print("Updating caddy source...")
+		err := fetchCaddy()
+		exitIfErr(err)
+		fmt.Println(" done.")
+	}
+
 	caddybuild.SetConfig(config)
 
 	var builder custombuild.Builder
@@ -104,63 +121,58 @@ func parseArgs() (Args, error) {
 	fs.StringVar(&args.after, "after", args.after, "")
 	fs.StringVar(&args.source, "s", args.source, "")
 	fs.StringVar(&args.source, "source", args.source, "")
-	fs.BoolVar(&h, "h", false, "")
+	fs.BoolVar(&args.update, "u", args.update, "")
+	fs.BoolVar(&args.update, "update", args.update, "")
+	fs.BoolVar(&h, "h", h, "")
 	fs.BoolVar(&h, "help", h, "")
 
 	err := fs.Parse(os.Args[1:])
 	if h || err != nil {
 		return args, fmt.Errorf(usage)
 	}
-
 	if fs.NArg() < 1 {
 		return args, usageError(fmt.Errorf("directive not set."))
 	}
-
 	args.directive = fs.Arg(0)
-
 	if fs.NArg() > 1 {
 		args.caddyArgs = fs.Args()[1:]
 	}
-
 	return args, err
 }
 
-// readConfig reads the middleware.json config file.
+// readConfig reads configs from the cli arguments.
 func readConfig(args Args) (caddybuild.Config, error) {
 	var config = caddybuild.Config{
 		Middleware: features.Middleware{args.directive, ""},
 	}
-	if args.source == "" {
-		return config, fmt.Errorf("Invalid source")
+	if args.source != "" {
+		if src := pkgFromDir(args.source); src != "" {
+			config.Middleware.Package = src
+			return config, nil
+		}
 	}
-	if src := pkgFromDir(args.source); src != "" {
-		config.Middleware.Package = src
-		return config, nil
-	}
-	return config, fmt.Errorf("Invalid source")
+	return config, fmt.Errorf("Invalid source directory.")
 }
 
+// pkgFromDir extracts package import path from dir. dir can be a path on file system
+// or go get path.
 func pkgFromDir(dir string) string {
 	gopaths := strings.Split(os.Getenv("GOPATH"), string(filepath.ListSeparator))
 
-	// if directory exits, infer package name relative to GOPATH
+	// if directory exits, infer import path from dir relative to GOPATH.
 	if stat, err := os.Stat(dir); err == nil && stat.IsDir() {
 		for _, gopath := range gopaths {
 			absgopath, _ := filepath.Abs(gopath)
-			gosrc := filepath.Join(absgopath, "src") + "/"
+			gosrc := filepath.Join(absgopath, "src") + string(filepath.Separator)
 			absdir, _ := filepath.Abs(dir)
 			if strings.HasPrefix(absdir, gosrc) {
 				return strings.TrimPrefix(absdir, gosrc)
 			}
 		}
 	}
-
-	// check if valid package
-	for _, gopath := range gopaths {
-		absPath := filepath.Join(gopath, "src", dir)
-		if _, err := os.Stat(absPath); err == nil {
-			return dir
-		}
+	// else assume dir is a go get path and validate if it exists.
+	if isLocalPkg(dir) {
+		return dir
 	}
 	return ""
 }
@@ -173,10 +185,24 @@ func startCaddy(file string, args []string) error {
 	if err := cmd.Run(); err != nil {
 		return err
 	}
-	if err := cmd.Wait(); err != nil {
-		return err
+	return cmd.Wait()
+}
+
+func fetchCaddy() error {
+	_, err := exec.Command("go", "get", "-u", caddybuild.CaddyPackage).Output()
+	return err
+}
+
+// isLocalPkg takes a go package name and validate if it exists on the filesystem.
+func isLocalPkg(p string) bool {
+	gopaths := strings.Split(os.Getenv("GOPATH"), string(filepath.ListSeparator))
+	for _, gopath := range gopaths {
+		absPath := filepath.Join(gopath, "src", p)
+		if _, err := os.Stat(absPath); err == nil {
+			return true
+		}
 	}
-	return nil
+	return false
 }
 
 // trapInterrupts traps OS interrupt signals.
@@ -200,4 +226,8 @@ func exitIfErr(err error) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func usageError(err error) error {
+	return fmt.Errorf("Error: %v\n\n%v", err, usage)
 }

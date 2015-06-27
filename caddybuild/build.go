@@ -27,11 +27,12 @@ type Config struct {
 
 const (
 	directivesFile = "config/directives.go"
+	CaddyPackage   = "github.com/mholt/caddy"
 )
 
 var (
 	config          Config
-	errParse        = errors.New("Error creating custom build, check setup setting.")
+	errParse        = errors.New("Error creating custom build, check settings.")
 	errPackageNames = errors.New("Error retrieving package names.")
 
 	// directivePos maps directive name to its position on the Registry.
@@ -50,7 +51,7 @@ func init() {
 // If error is not nil, the returned Builder should be ignored.
 func PrepareBuild(middlewares features.Middlewares) (custombuild.Builder, error) {
 	// create builder
-	builder, err := custombuild.NewUnready("github.com/mholt/caddy", gen(middlewares), middlewares.Packages())
+	builder, err := custombuild.NewUnready(CaddyPackage, gen(middlewares), middlewares.Packages())
 	if err != nil {
 		return builder, err
 	}
@@ -67,7 +68,7 @@ func PrepareBuild(middlewares features.Middlewares) (custombuild.Builder, error)
 
 	// necessary to ensure import "github.com/mholt/caddy..." is referencing
 	// this code.
-	err = builder.SetImportPath("github.com/mholt/caddy")
+	err = builder.SetImportPath(CaddyPackage)
 	if err != nil {
 		// not useful, clear assets
 		go builder.Teardown()
@@ -134,7 +135,7 @@ func gen(middlewares features.Middlewares) custombuild.CodeGenFunc {
 					}
 				}
 				if !found {
-					return fmt.Errorf("Directive '%s' not found. Ensure 'after' in middleware.json is a valid directive.", config.After)
+					return fmt.Errorf("Directive '%s' not found.", config.After)
 				}
 			}
 

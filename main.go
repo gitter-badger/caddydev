@@ -1,12 +1,13 @@
 package main
 
 import (
-	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -16,20 +17,30 @@ import (
 )
 
 const (
-	configFile = "middleware.json"
-	usage      = `Usage:
-	caddydev [-c|-h|help] [caddy flags]
+	usage = `Usage: caddydev [options] directive [caddy flags]
 
-	-c=middleware.json - Path to config file.
-	-h=false - show this usage.
-	help - alias for -h=true
-	caddy flags - flags to pass to caddy.
+options:
+  -s, -source="."   Source code directory or go get path.
+  -a, -after=""     Priority. After which directive should our new directive be placed.
+  -h, -help=false   Show this usage.
+
+directive:
+  directive of the middleware being developed.
+
+caddy flags:
+  flags to pass to the resulting custom caddy binary.
 `
 )
 
 type Args struct {
-	configFile string
-	caddyArgs  []string
+	directive string
+	after     string
+	source    string
+	caddyArgs []string
+}
+
+func usageError(err error) error {
+	return fmt.Errorf("Error: %v\n\n%v", err, usage)
 }
 
 func main() {
@@ -38,7 +49,7 @@ func main() {
 	exitIfErr(err)
 
 	// read config file.
-	config, err := readConfig(args.configFile)
+	config, err := readConfig(args)
 	exitIfErr(err)
 	caddybuild.SetConfig(config)
 
@@ -46,17 +57,13 @@ func main() {
 	var f *os.File
 	// remove temp files.
 	var cleanup = func() {
+		builder.Teardown()
 		if f != nil {
-			builder.Teardown()
 			os.Remove(f.Name())
 		}
 	}
 
-	middleware := features.Middleware{
-		Directive: config.Directive,
-		Package:   config.Import,
-	}
-	builder, err = caddybuild.PrepareBuild(features.Middlewares{middleware})
+	builder, err = caddybuild.PrepareBuild(features.Middlewares{config.Middleware})
 	exitIfErr(err)
 
 	// create temp file for custom binary.
@@ -87,46 +94,75 @@ func main() {
 
 // parseArgs parses cli arguments. This caters for parsing extra flags to caddy.
 func parseArgs() (Args, error) {
-	args := Args{configFile: configFile}
-	if len(os.Args) == 1 {
-		return args, nil
-	}
+	args := Args{source: "."}
 
-	if os.Args[1] == "-h" || os.Args[1] == "help" {
+	fs := flag.FlagSet{}
+	fs.SetOutput(ioutil.Discard)
+	h := false
+
+	fs.StringVar(&args.after, "a", args.after, "")
+	fs.StringVar(&args.after, "after", args.after, "")
+	fs.StringVar(&args.source, "s", args.source, "")
+	fs.StringVar(&args.source, "source", args.source, "")
+	fs.BoolVar(&h, "h", false, "")
+	fs.BoolVar(&h, "help", h, "")
+
+	err := fs.Parse(os.Args[1:])
+	if h || err != nil {
 		return args, fmt.Errorf(usage)
 	}
 
-	if !strings.HasPrefix(os.Args[1], "-c") {
-		args.caddyArgs = os.Args[1:]
-		return args, nil
+	if fs.NArg() < 1 {
+		return args, usageError(fmt.Errorf("directive not set."))
 	}
-	// for -c=middleware.json
-	if c := strings.Split(os.Args[1], "="); len(c) > 1 {
-		args.configFile = c[1]
-		if len(os.Args) > 2 {
-			args.caddyArgs = os.Args[2:]
-		}
-		return args, nil
+
+	args.directive = fs.Arg(0)
+
+	if fs.NArg() > 1 {
+		args.caddyArgs = fs.Args()[1:]
 	}
-	if len(os.Args) < 3 {
-		return args, fmt.Errorf("config file path missing after using -c flag")
-	}
-	args.configFile = os.Args[2]
-	if len(os.Args) > 3 {
-		args.caddyArgs = os.Args[3:]
-	}
-	return args, nil
+
+	return args, err
 }
 
 // readConfig reads the middleware.json config file.
-func readConfig(file string) (caddybuild.Config, error) {
-	var config caddybuild.Config
-	f, err := os.Open(file)
-	if err != nil {
-		return config, err
+func readConfig(args Args) (caddybuild.Config, error) {
+	var config = caddybuild.Config{
+		Middleware: features.Middleware{args.directive, ""},
 	}
-	err = json.NewDecoder(f).Decode(&config)
-	return config, err
+	if args.source == "" {
+		return config, fmt.Errorf("Invalid source")
+	}
+	if src := pkgFromDir(args.source); src != "" {
+		config.Middleware.Package = src
+		return config, nil
+	}
+	return config, fmt.Errorf("Invalid source")
+}
+
+func pkgFromDir(dir string) string {
+	gopaths := strings.Split(os.Getenv("GOPATH"), string(filepath.ListSeparator))
+
+	// if directory exits, infer package name relative to GOPATH
+	if stat, err := os.Stat(dir); err == nil && stat.IsDir() {
+		for _, gopath := range gopaths {
+			absgopath, _ := filepath.Abs(gopath)
+			gosrc := filepath.Join(absgopath, "src") + "/"
+			absdir, _ := filepath.Abs(dir)
+			if strings.HasPrefix(absdir, gosrc) {
+				return strings.TrimPrefix(absdir, gosrc)
+			}
+		}
+	}
+
+	// check if valid package
+	for _, gopath := range gopaths {
+		absPath := filepath.Join(gopath, "src", dir)
+		if _, err := os.Stat(absPath); err == nil {
+			return dir
+		}
+	}
+	return ""
 }
 
 // startCaddy starts custom caddy and blocks until process stops.
@@ -152,8 +188,7 @@ func trapInterrupts(cleanup func()) chan struct{} {
 	go func() {
 		<-c
 		fmt.Print("OS Interrupt signal received. Performing cleanup...")
-		// TODO find how to buy more CPU time and run synchronously
-		go cleanup()
+		cleanup()
 		fmt.Println(" done.")
 		done <- struct{}{}
 	}()
@@ -166,4 +201,3 @@ func exitIfErr(err error) {
 		os.Exit(1)
 	}
 }
-

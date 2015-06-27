@@ -21,12 +21,8 @@ import (
 )
 
 type Config struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Import      string `json:"import"`
-	Repo        string `json:"repository"`
-	Directive   string `json:"directive`
-	After       string `json:"after"`
+	Middleware features.Middleware
+	After      string
 }
 
 const (

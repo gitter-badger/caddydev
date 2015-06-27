@@ -144,6 +144,7 @@ func parseArgs() (Args, error) {
 func readConfig(args Args) (caddybuild.Config, error) {
 	var config = caddybuild.Config{
 		Middleware: features.Middleware{args.directive, ""},
+		After:args.after,
 	}
 	if args.source != "" {
 		if src := pkgFromDir(args.source); src != "" {

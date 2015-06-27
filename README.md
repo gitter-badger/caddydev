@@ -45,8 +45,5 @@ caddy flags:
 ### Note
 caddydev is in active development and can still change significantly.
 
-### License
-This program is copyrighted, proprietary property and, as such, no license is granted for commercial use or redistribution.
-
 ### Disclaimer
 This software is provided as-is and you assume all risk.

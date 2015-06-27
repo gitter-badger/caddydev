@@ -88,6 +88,11 @@ func gen(middlewares features.Middlewares) custombuild.CodeGenFunc {
 			}
 		}()
 
+		// if no middleware is added, no code generation needed.
+		if len(middlewares) == 0 {
+			return nil
+		}
+
 		fset := token.NewFileSet()
 		file := filepath.Join(src, directivesFile)
 		f, err := parser.ParseFile(fset, file, nil, 0)
@@ -175,8 +180,8 @@ func getPackageNames(packages []string) (map[string]string, error) {
 	if len(names) < len(packages) {
 		return nil, errPackageNames
 	}
-	for i, v := range names {
-		m[packages[i]] = v
+	for i, p := range packages {
+		m[p] = names[i]
 	}
 	return m, nil
 }

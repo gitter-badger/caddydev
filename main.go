@@ -72,8 +72,12 @@ func main() {
 
 	var builder custombuild.Builder
 	var f *os.File
+	var caddyProcess *os.Process
 	// remove temp files.
 	var cleanup = func() {
+		if caddyProcess != nil {
+			caddyProcess.Kill()
+		}
 		builder.Teardown()
 		if f != nil {
 			os.Remove(f.Name())
@@ -99,7 +103,10 @@ func main() {
 
 	// start custom caddy.
 	go func() {
-		err = startCaddy(f.Name(), args.caddyArgs)
+		cmd, err := startCaddy(f.Name(), args.caddyArgs)
+		exitIfErr(err)
+		caddyProcess = cmd.Process
+		err = cmd.Wait()
 		cleanup()
 		exitIfErr(err)
 	}()
@@ -144,7 +151,7 @@ func parseArgs() (Args, error) {
 func readConfig(args Args) (caddybuild.Config, error) {
 	var config = caddybuild.Config{
 		Middleware: features.Middleware{Directive: args.directive},
-		After:args.after,
+		After:      args.after,
 	}
 	if args.source != "" {
 		if src := pkgFromDir(args.source); src != "" {
@@ -178,15 +185,13 @@ func pkgFromDir(dir string) string {
 	return ""
 }
 
-// startCaddy starts custom caddy and blocks until process stops.
-func startCaddy(file string, args []string) error {
+// startCaddy starts custom caddy.
+func startCaddy(file string, args []string) (*exec.Cmd, error) {
 	cmd := exec.Command(file, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-	return cmd.Wait()
+	err := cmd.Run()
+	return cmd, err
 }
 
 func fetchCaddy() error {

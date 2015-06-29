@@ -114,33 +114,36 @@ func gen(middlewares features.Middlewares) custombuild.CodeGenFunc {
 
 		out := buf.String()
 
-		for _, m := range middlewares {
+		for _, mid := range middlewares {
 			f, err = parser.ParseFile(token.NewFileSet(), "", out, 0)
 			node, ok := f.Scope.Lookup("directiveOrder").Decl.(ast.Node)
 			if !ok {
 				return errParse
 			}
 
-			snippet := fmt.Sprintf(`{"%s", %s.Setup},`+"\n", m.Directive, packageNames[m.Package])
+			snippet := fmt.Sprintf(`{"%s", %s.Setup},`+"\n", mid.Directive, packageNames[mid.Package])
 
 			// add to end of directives.
 			end := int(node.End()) - 2
 
 			// if after is set, locate directive and add after it.
-			after := getPrevDirective(m.Directive)
+			after := getPrevDirective(mid.Directive)
 			if after != "" {
 				found := false
 				c := node.(*ast.ValueSpec).Values[0].(*ast.CompositeLit)
 				for _, m := range c.Elts {
 					directive := m.(*ast.CompositeLit).Elts[0].(*ast.BasicLit)
-					if strconv.Quote(after) == directive.Value {
+					if strconv.Quote(after) == directive.Value && !found {
 						end = int(m.End()) + 1
 						found = true
-						break
+					}
+					// check if directive exists
+					if strconv.Quote(mid.Directive) == directive.Value {
+						return fmt.Errorf("Directive '%s' exists in Caddy core, use a distinct name.", mid.Directive)
 					}
 				}
 				if !found {
-					return fmt.Errorf("Directive '%s' not found.", config.After)
+					return fmt.Errorf("Cannot place afer %s, directive '%s' not found.", config.After, config.After)
 				}
 			}
 

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -23,6 +24,8 @@ options:
   -s, -source="."   Source code directory or go get path.
   -a, -after=""     Priority. After which directive should our new directive be placed.
   -u, -update=false Pull latest caddy source code before building.
+  -o, -output=""    Path to save custom build. If set, the binary will only be generated, not executed.
+                    Set GOOS, GOARCH, GOARM environment variables to generate for other platforms.
   -h, -help=false   Show this usage.
 
 directive:
@@ -33,10 +36,11 @@ caddy flags:
 `
 )
 
-type Args struct {
+type cliArgs struct {
 	directive string
 	after     string
 	source    string
+	output    string
 	update    bool
 	caddyArgs []string
 }
@@ -87,7 +91,14 @@ func main() {
 	builder, err = caddybuild.PrepareBuild(features.Middlewares{config.Middleware})
 	exitIfErr(err)
 
-	// create temp file for custom binary.
+	// if output is set, generate binary only.
+	if args.output != "" {
+		err := saveCaddy(builder, args.output)
+		exitIfErr(err)
+		return
+	}
+
+	// create temporary file for binary
 	f, err = ioutil.TempFile("", "caddydev")
 	exitIfErr(err)
 	f.Close()
@@ -109,6 +120,7 @@ func main() {
 		err = cmd.Wait()
 		cleanup()
 		exitIfErr(err)
+		done <- struct{}{}
 	}()
 
 	// wait for exit signal
@@ -117,8 +129,8 @@ func main() {
 }
 
 // parseArgs parses cli arguments. This caters for parsing extra flags to caddy.
-func parseArgs() (Args, error) {
-	args := Args{source: "."}
+func parseArgs() (cliArgs, error) {
+	args := cliArgs{source: "."}
 
 	fs := flag.FlagSet{}
 	fs.SetOutput(ioutil.Discard)
@@ -128,6 +140,8 @@ func parseArgs() (Args, error) {
 	fs.StringVar(&args.after, "after", args.after, "")
 	fs.StringVar(&args.source, "s", args.source, "")
 	fs.StringVar(&args.source, "source", args.source, "")
+	fs.StringVar(&args.output, "o", args.output, "")
+	fs.StringVar(&args.output, "output", args.output, "")
 	fs.BoolVar(&args.update, "u", args.update, "")
 	fs.BoolVar(&args.update, "update", args.update, "")
 	fs.BoolVar(&h, "h", h, "")
@@ -148,7 +162,7 @@ func parseArgs() (Args, error) {
 }
 
 // readConfig reads configs from the cli arguments.
-func readConfig(args Args) (caddybuild.Config, error) {
+func readConfig(args cliArgs) (caddybuild.Config, error) {
 	var config = caddybuild.Config{
 		Middleware: features.Middleware{Directive: args.directive},
 		After:      args.after,
@@ -192,6 +206,16 @@ func startCaddy(file string, args []string) (*exec.Cmd, error) {
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	return cmd, err
+}
+
+func saveCaddy(builder custombuild.Builder, file string) error {
+	goos := os.Getenv("GOOS")
+	goarch := os.Getenv("GOARCH")
+	goarm, _ := strconv.Atoi(os.Getenv("GOARM"))
+	if goarch == "arm" {
+		return builder.BuildARM(goos, goarm, file)
+	}
+	return builder.Build(goos, goarch, file)
 }
 
 func fetchCaddy() error {

@@ -34,6 +34,8 @@ options:
   -s, -source="."   Source code directory or go get path.
   -a, -after=""     Priority. After which directive should our new directive be placed.
   -u, -update=false Pull latest caddy source code before building.
+  -o, -output=""    Path to save custom build. If set, the binary will only be generated, not executed.
+                    Set GOOS, GOARCH, GOARM environment variables to generate for other platforms.
   -h, -help=false   Show this usage.
 
 directive:

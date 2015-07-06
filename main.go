@@ -18,21 +18,26 @@ import (
 )
 
 const (
-	usage = `Usage: caddydev [options] directive [caddy flags]
+	usage = `Usage: caddydev [options] directive [caddy flags] [go [build flags]]
 
 options:
-  -s, -source="."   Source code directory or go get path.
-  -a, -after=""     Priority. After which directive should our new directive be placed.
-  -u, -update=false Pull latest caddy source code before building.
-  -o, -output=""    Path to save custom build. If set, the binary will only be generated, not executed.
-                    Set GOOS, GOARCH, GOARM environment variables to generate for other platforms.
-  -h, -help=false   Show this usage.
+  -s, --source="."   Source code directory or go get path.
+  -a, --after=""     Priority. After which directive should our new directive be placed.
+  -u, --update=false Pull latest caddy source code before building.
+  -o, --output=""    Path to save custom build. If set, the binary will only be generated, not executed.
+                     Set GOOS, GOARCH, GOARM environment variables to generate for other platforms.
+  -h, --help=false   Show this usage.
 
 directive:
   directive of the middleware being developed.
 
 caddy flags:
   flags to pass to the resulting custom caddy binary.
+
+go build flags:
+  flags to pass to 'go build' while building custom binary prefixed with 'go'.
+  go keyword is used to differentiate caddy flags from go build flags.
+  e.g. go -race -x -v.
 `
 )
 
@@ -43,6 +48,7 @@ type cliArgs struct {
 	output    string
 	update    bool
 	caddyArgs []string
+	goArgs    []string
 }
 
 func main() {
@@ -93,7 +99,7 @@ func main() {
 
 	// if output is set, generate binary only.
 	if args.output != "" {
-		err := saveCaddy(builder, args.output)
+		err := saveCaddy(builder, args.output, args.goArgs)
 		exitIfErr(err)
 		return
 	}
@@ -104,7 +110,7 @@ func main() {
 	f.Close()
 
 	// perform custom build
-	err = builder.Build("", "", f.Name())
+	err = builder.Build("", "", f.Name(), args.goArgs...)
 	exitIfErr(err)
 
 	fmt.Println("Starting caddy...")
@@ -155,8 +161,18 @@ func parseArgs() (cliArgs, error) {
 		return args, usageError(fmt.Errorf("directive not set."))
 	}
 	args.directive = fs.Arg(0)
+	// extract caddy and go args
 	if fs.NArg() > 1 {
-		args.caddyArgs = fs.Args()[1:]
+		remArgs := fs.Args()[1:]
+		for i, arg := range remArgs {
+			if arg == "go" {
+				if len(remArgs) > i+1 {
+					args.goArgs = remArgs[i+1:]
+				}
+				break
+			}
+			args.caddyArgs = append(args.caddyArgs, arg)
+		}
 	}
 	return args, err
 }
@@ -208,14 +224,14 @@ func startCaddy(file string, args []string) (*exec.Cmd, error) {
 	return cmd, err
 }
 
-func saveCaddy(builder custombuild.Builder, file string) error {
+func saveCaddy(builder custombuild.Builder, file string, buildArgs []string) error {
 	goos := os.Getenv("GOOS")
 	goarch := os.Getenv("GOARCH")
 	goarm, _ := strconv.Atoi(os.Getenv("GOARM"))
 	if goarch == "arm" {
-		return builder.BuildARM(goos, goarm, file)
+		return builder.BuildARM(goos, goarm, file, buildArgs...)
 	}
-	return builder.Build(goos, goarch, file)
+	return builder.Build(goos, goarch, file, buildArgs...)
 }
 
 func fetchCaddy() error {

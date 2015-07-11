@@ -13,7 +13,7 @@ $ go get github.com/abiosoft/hello-caddy
 ```
 ##### 2. Start caddydev.
 ```shell
-$ caddydev -source github.com/abiosoft/hello-caddy hello
+$ caddydev --source github.com/abiosoft/hello-caddy hello
 Starting caddy...
 0.0.0.0:2015
 ```

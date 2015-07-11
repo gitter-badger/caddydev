@@ -84,7 +84,7 @@ func main() {
 	var f *os.File
 	var caddyProcess *os.Process
 	// remove temp files.
-	var cleanup = func() {
+	addCleanUpFunc(func() {
 		if caddyProcess != nil {
 			caddyProcess.Kill()
 		}
@@ -92,7 +92,7 @@ func main() {
 		if f != nil {
 			os.Remove(f.Name())
 		}
-	}
+	})
 
 	builder, err = caddybuild.PrepareBuild(features.Middlewares{config.Middleware})
 	exitIfErr(err)
@@ -116,7 +116,7 @@ func main() {
 	fmt.Println("Starting caddy...")
 
 	// trap os interrupts to ensure cleaning up temp files.
-	done := trapInterrupts(cleanup)
+	done := trapInterrupts()
 
 	// start custom caddy.
 	go func() {
@@ -124,7 +124,7 @@ func main() {
 		exitIfErr(err)
 		caddyProcess = cmd.Process
 		err = cmd.Wait()
-		cleanup()
+		cleanUp()
 		exitIfErr(err)
 		done <- struct{}{}
 	}()
@@ -207,11 +207,12 @@ func pkgFromDir(dir string) string {
 				return strings.TrimPrefix(absdir, gosrc)
 			}
 		}
+		// not in GOPATH, create symlink to fake GOPATH.
+		if newpath, err := symlinkGOPATH(dir); err == nil {
+			return filepath.Base(newpath)
+		}
 	}
-	// else assume dir is a go get path and validate if it exists.
-	if isLocalPkg(dir) {
-		return dir
-	}
+
 	return ""
 }
 
@@ -251,8 +252,35 @@ func isLocalPkg(p string) bool {
 	return false
 }
 
+// symlinkGOPATH creates a symlink to the source directory in a valid GOPATH.
+func symlinkGOPATH(dir string) (string, error) {
+	var gopath string
+	var err error
+	if gopath, err = ioutil.TempDir("", "caddydev"); err != nil {
+		return "", err
+	}
+	src := filepath.Join(gopath, "src")
+	if err := os.MkdirAll(src, os.FileMode(0700)); err != nil {
+		return "", err
+	}
+	if dir, err = filepath.Abs(dir); err != nil {
+		return "", err
+	}
+	newpath := filepath.Join(src, "caddyaddon")
+	if err = os.Symlink(dir, newpath); err != nil {
+		return "", err
+	}
+	err = os.Setenv("GOPATH", gopath+string(filepath.ListSeparator)+os.Getenv("GOPATH"))
+	if err == nil {
+		addCleanUpFunc(func() {
+			os.Remove(newpath)
+		})
+	}
+	return newpath, err
+}
+
 // trapInterrupts traps OS interrupt signals.
-func trapInterrupts(cleanup func()) chan struct{} {
+func trapInterrupts() chan struct{} {
 	done := make(chan struct{})
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -260,11 +288,26 @@ func trapInterrupts(cleanup func()) chan struct{} {
 	go func() {
 		<-c
 		fmt.Print("OS Interrupt signal received. Performing cleanup...")
-		cleanup()
+		cleanUp()
 		fmt.Println(" done.")
 		done <- struct{}{}
 	}()
 	return done
+}
+
+// cleanUpFuncs is list of functions to call before application exits.
+var cleanUpFuncs []func()
+
+// addCleanUpFunc adds a function to cleanUpFuncs.
+func addCleanUpFunc(f func()) {
+	cleanUpFuncs = append(cleanUpFuncs, f)
+}
+
+// cleanUp calls all functions in cleanUpFuncs.
+func cleanUp() {
+	for i := range cleanUpFuncs {
+		cleanUpFuncs[i]()
+	}
 }
 
 func exitIfErr(err error) {

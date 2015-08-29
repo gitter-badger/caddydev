@@ -1,4 +1,6 @@
 # caddydev
+
+[![Join the chat at https://gitter.im/caddyserver/caddydev](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/caddyserver/caddydev?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 Tool for developing custom [Caddy](http://caddyserver.com) middleware.
 
 ### Installation
